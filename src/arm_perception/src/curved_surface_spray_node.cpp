@@ -76,8 +76,12 @@ public:
     pnh.param<bool>("visualize", visualize_, true);
 
     // ---- STL 网格参数 ----
-    std::string default_stl = ros::package::getPath("arm_description")
-                            + "/meshes/car_door_visual.stl";
+    std::string pkg_path = ros::package::getPath("arm_description");
+    if (pkg_path.empty())
+    {
+      ROS_WARN("无法找到 arm_description 包路径，请确认已正确编译并 source 工作空间。");
+    }
+    std::string default_stl = pkg_path + "/meshes/car_door_visual.stl";
     pnh.param<std::string>("stl_filepath", stl_filepath_, default_stl);
     pnh.param<double>("mesh_scale", mesh_scale_, 0.001);
 
