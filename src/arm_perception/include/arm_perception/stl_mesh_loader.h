@@ -72,8 +72,11 @@ public:
    */
   void applyTransform(const Eigen::Isometry3d& transform);
 
-  /// 获取所有三角面片
+  /// 获取所有三角面片（只读）
   const std::vector<Triangle>& triangles() const { return triangles_; }
+
+  /// 获取所有三角面片（可修改，用于翻转法向量等操作）
+  std::vector<Triangle>& trianglesMutable() { return triangles_; }
 
   /// 获取网格包围盒最小角点
   const Eigen::Vector3d& boundsMin() const { return bounds_min_; }

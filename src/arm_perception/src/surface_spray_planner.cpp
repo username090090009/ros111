@@ -48,10 +48,7 @@ bool SurfaceSprayPlanner::init(const SprayPlannerParams& params)
   // 3. 可选：翻转法向量
   if (params_.flip_normals)
   {
-    // 翻转所有三角面法向量
-    // 注意：applyTransform 后的法向量指向可能需要根据实际情况调整
-    // 这里通过 180° 旋转法向量来实现翻转
-    for (auto& tri : const_cast<std::vector<Triangle>&>(mesh_.triangles()))
+    for (auto& tri : mesh_.trianglesMutable())
     {
       tri.normal = -tri.normal;
     }
@@ -86,7 +83,7 @@ void SurfaceSprayPlanner::sliceMeshAtHeight(
       double z0 = p0.z();
       double z1 = p1.z();
 
-      // 检查边是否跨越 z_height
+      // 检查边是否跨越 z_height（严格跨越，排除端点恰好在平面上的情况）
       if ((z0 - z_height) * (z1 - z_height) < 0.0)
       {
         // 线性插值求交点
@@ -94,9 +91,22 @@ void SurfaceSprayPlanner::sliceMeshAtHeight(
         Eigen::Vector3d intersection = p0 + t * (p1 - p0);
         intersections.push_back(intersection);
       }
-      else if (std::abs(z0 - z_height) < 1e-6)
+    }
+
+    // 如果没有严格交叉的边，检查顶点是否恰好在平面上
+    if (intersections.empty())
+    {
+      for (int v = 0; v < 3; ++v)
       {
-        intersections.push_back(p0);
+        if (std::abs(tri.vertices[v].z() - z_height) < 1e-6)
+        {
+          intersections.push_back(tri.vertices[v]);
+        }
+      }
+      // 去重：顶点在平面上时可能被多次添加
+      if (intersections.size() > 2)
+      {
+        intersections.resize(2);
       }
     }
 

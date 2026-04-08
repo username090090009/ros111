@@ -9,7 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_conversions
   pcl_ros
   roscpp
-  roslib
+  roslib          # ros::package::getPath() 用于定位 STL 文件
   sensor_msgs
   std_msgs
   visualization_msgs

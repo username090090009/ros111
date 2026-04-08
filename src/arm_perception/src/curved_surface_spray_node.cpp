@@ -56,12 +56,10 @@ class CurvedSurfaceSprayNode
 {
 public:
   CurvedSurfaceSprayNode()
-    : move_group_("arm")
+    : planning_group_(ros::NodeHandle("~").param<std::string>("planning_group", "arm")),
+      move_group_(planning_group_)
   {
     ros::NodeHandle pnh("~");
-
-    // ---- MoveIt 参数 ----
-    pnh.param<std::string>("planning_group", planning_group_, "arm");
     pnh.param<std::string>("end_effector_link", end_effector_link_, "spray_tcp_link");
     pnh.param<double>("planning_time", planning_time_, 15.0);
     pnh.param<int>("max_attempts", max_attempts_, 20);
@@ -229,6 +227,7 @@ public:
 
     int current_band = -1;
     std::vector<geometry_msgs::Pose> band_poses;
+    bool prev_band_failed = false;
 
     for (size_t i = 0; i < waypoints.size(); ++i)
     {
@@ -242,12 +241,38 @@ public:
           if (!executeCartesianBand(band_poses, current_band))
           {
             ROS_WARN("条带 %d 执行失败，跳过继续下一条带", current_band);
+            prev_band_failed = true;
+          }
+          else
+          {
+            prev_band_failed = false;
           }
           ros::Duration(0.2).sleep();
         }
 
         current_band = waypoints[i].band_index;
         band_poses.clear();
+
+        // 如果上一条带失败，先用关节空间规划移动到新条带起始点
+        if (prev_band_failed)
+        {
+          geometry_msgs::Pose next_start;
+          next_start.position.x = waypoints[i].position.x();
+          next_start.position.y = waypoints[i].position.y();
+          next_start.position.z = waypoints[i].position.z();
+          next_start.orientation.x = waypoints[i].orientation.x();
+          next_start.orientation.y = waypoints[i].orientation.y();
+          next_start.orientation.z = waypoints[i].orientation.z();
+          next_start.orientation.w = waypoints[i].orientation.w();
+
+          ROS_INFO("恢复：移动到条带 %d 起始点", current_band);
+          if (!moveToPose(next_start, "条带恢复起始点"))
+          {
+            ROS_WARN("无法到达条带 %d 起始点，跳过", current_band);
+          }
+          ros::Duration(0.3).sleep();
+          prev_band_failed = false;
+        }
       }
 
       geometry_msgs::Pose pose;
@@ -483,10 +508,11 @@ private:
 
   // ---- 成员变量 ----
   ros::NodeHandle nh_;
+
+  // MoveIt 参数（planning_group_ 必须在 move_group_ 之前声明，因为初始化列表中使用）
+  std::string planning_group_;
   moveit::planning_interface::MoveGroupInterface move_group_;
 
-  // MoveIt 参数
-  std::string planning_group_;
   std::string end_effector_link_;
   double planning_time_;
   int max_attempts_;
