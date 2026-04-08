@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<robot name="door_panel" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  
+  <link name="door_link">
+
+    
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="8.0"/>
+      <inertia ixx="0.2" ixy="0.0" ixz="0.0"
+               iyy="0.2" iyz="0.0"
+               izz="0.2"/>
+    </inertial>
+
+    
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://arm_description/meshes/car_door_visual.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.92 0.92 0.95 1.0"/>
+      </material>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://arm_description/meshes/car_door_collision.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  
+  
+
+
+  <gazebo reference="door_link">
+    <material>Gazebo/White</material>
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+  </gazebo>
+
+
+
+</robot>

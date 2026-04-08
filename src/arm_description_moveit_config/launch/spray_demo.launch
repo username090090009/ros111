@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<!--
+  spray_demo.launch
+  ==================
+  One-stop launch for the complete visual-guided spray painting demo:
+    1. Gazebo (physics + rendering)
+    2. MoveIt real execution via ros_control (arm moves in Gazebo)
+    3. Point cloud perception node (door_cloud_listener)
+    4. Automatic spray executor (door_spray_executor)
+
+  This is the recommended entry point for the full end-to-end demo.
+
+  Usage:
+    roslaunch arm_description_moveit_config spray_demo.launch
+
+  To watch in RViz, the spray_demo.launch already starts RViz.
+  You can also watch the arm move in the Gazebo window.
+
+  Spray parameters can be tuned by passing arguments to door_spray_executor:
+    rosrun arm_perception door_spray_executor
+      _spray_width:=0.08
+      _spray_height:=0.20
+      _line_spacing:=0.03
+      _min_cartesian_fraction:=0.80
+-->
+<launch>
+
+  <!-- ===== Top-level switches ===== -->
+  <arg name="paused"      default="false" doc="Start Gazebo paused"/>
+  <arg name="gazebo_gui"  default="true"  doc="Show Gazebo GUI"/>
+  <arg name="use_rviz"    default="true"  doc="Launch RViz"/>
+  <arg name="pipeline"    default="ompl"  doc="MoveIt planning pipeline"/>
+  <arg name="debug"       default="false" doc="MoveIt debug mode"/>
+
+  <!-- ===== 1. Gazebo + MoveIt real execution ===== -->
+  <include file="$(dirname)/gazebo_spray.launch">
+    <arg name="paused"     value="$(arg paused)"/>
+    <arg name="gazebo_gui" value="$(arg gazebo_gui)"/>
+    <arg name="use_rviz"   value="$(arg use_rviz)"/>
+    <arg name="pipeline"   value="$(arg pipeline)"/>
+    <arg name="debug"      value="$(arg debug)"/>
+  </include>
+
+  <node name="door_cloud_listener" pkg="arm_perception"
+        type="door_cloud_listener" output="screen">
+    <param name="approach_offset" value="0.20"/>
+  </node>
+
+
+  <node name="door_spray_executor" pkg="arm_perception"
+      type="door_spray_executor" output="screen">
+    <param name="spray_width" value="0.30"/>
+    <param name="spray_height" value="0.30"/>
+    <param name="line_spacing" value="0.03"/>
+    <param name="eef_step" value="0.02"/>
+    <param name="min_cartesian_fraction" value="0.70"/>
+  </node>
+
+</launch>

@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<!--
+  gazebo_spray.launch
+  =====================
+  Launches the full Gazebo + MoveIt real-execution pipeline for the arm spray system.
+
+  Unlike demo.launch (which uses fake controllers), this launch file:
+    1. Starts Gazebo and spawns the arm robot
+    2. Loads and spawns the real ros_control JointTrajectoryController under /arm namespace
+    3. Starts MoveIt move_group using the simple controller manager, which sends
+       FollowJointTrajectory actions to /arm/arm_controller — so Gazebo actually moves
+    4. Starts RViz with the standard MoveIt config
+
+  Usage:
+    roslaunch arm_description_moveit_config gazebo_spray.launch
+
+  Then in separate terminals:
+    rosrun arm_perception door_cloud_listener
+    rosrun arm_perception door_spray_executor
+-->
+<launch>
+
+  <!-- ===== Arguments ===== -->
+  <arg name="paused"      default="false" doc="Start Gazebo paused"/>
+  <arg name="gazebo_gui"  default="true"  doc="Show Gazebo GUI"/>
+  <arg name="world_name"  default="worlds/empty.world" doc="Gazebo world"/>
+  <arg name="pipeline"    default="ompl"  doc="MoveIt planning pipeline"/>
+  <arg name="use_rviz"    default="true"  doc="Launch RViz"/>
+  <arg name="debug"       default="false" doc="MoveIt debug mode"/>
+  <!-- <arg name="unpaused_flag" default="$(eval '' if arg('paused') == 'true' else '-unpause')"/> -->
+
+  <!-- ===== 1. Gazebo ===== -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name"  value="$(arg world_name)"/>
+    <arg name="paused"      value="true"/>   <!-- always start paused; unpause after spawn -->
+    <arg name="gui"         value="$(arg gazebo_gui)"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
+
+  <!-- ===== 2. Robot Description ===== -->
+  <param name="robot_description"
+         command="xacro '$(find arm_description)/urdf/arm_description.xacro'"/>
+
+  <!-- ===== 3. Spawn Robot & Unpause ===== -->
+  <node name="spawn_robot" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+        args="-urdf -param robot_description -model arm_spray
+              -x 0 -y 0 -z 0.05
+              -unpause"/>
+
+  <!-- ===== 4. Load Controller Parameters ===== -->
+  <!--
+    arm_description/config/arm_controllers.yaml is structured as:
+      arm:
+        joint_state_controller: ...
+        arm_controller: ...
+    Loading it at global level puts params at /arm/joint_state_controller,
+    /arm/arm_controller, which matches robotNamespace="/arm" in the URDF plugin.
+  -->
+  <rosparam file="$(find arm_description)/config/arm_controllers.yaml" command="load"/>
+
+  <!-- ===== 5. Spawn Controllers under /arm namespace ===== -->
+  <!--
+    The gazebo_ros_control plugin uses <robotNamespace>/arm</robotNamespace>,
+    so the controller manager service is at /arm/controller_manager.
+    We spawn both joint_state_controller and arm_controller here.
+  -->
+  <node name="controller_spawner" pkg="controller_manager" type="spawner"
+        ns="/arm" respawn="false" output="screen"
+        args="joint_state_controller arm_controller"/>
+
+  <!-- ===== 6. Robot State Publisher ===== -->
+  <!--
+    Subscribes to /arm/joint_states (published by joint_state_controller)
+    and publishes TF for all robot links.
+  -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher"
+        type="robot_state_publisher" respawn="true" output="screen">
+    <remap from="joint_states" to="/arm/joint_states"/>
+  </node>
+
+  <!-- ===== 7. MoveIt move_group ===== -->
+  <!--
+    Uses moveit_simple_controller_manager with simple_moveit_controllers.yaml
+    which points to /arm/arm_controller/follow_joint_trajectory.
+    The joint_states remap ensures the planning scene monitor tracks the real
+    robot state from /arm/joint_states.
+  -->
+  <group>
+    <!-- Redirect joint state monitoring to the real Gazebo topic -->
+    <remap from="joint_states" to="/arm/joint_states"/>
+
+    <include file="$(dirname)/move_group.launch">
+      <arg name="allow_trajectory_execution"  value="true"/>
+      <arg name="moveit_controller_manager"   value="simple"/>
+      <arg name="info"                        value="true"/>
+      <arg name="debug"                       value="$(arg debug)"/>
+      <arg name="pipeline"                    value="$(arg pipeline)"/>
+      <arg name="load_robot_description"      value="false"/>
+    </include>
+  </group>
+
+  <!-- ===== 8. RViz ===== -->
+  <include file="$(dirname)/moveit_rviz.launch" if="$(arg use_rviz)">
+    <arg name="rviz_config" value="$(dirname)/moveit.rviz"/>
+    <arg name="debug"       value="$(arg debug)"/>
+  </include>
+
+</launch>
