@@ -75,6 +75,7 @@
   <depend>moveit_ros_planning_interface</depend>
   <depend>moveit_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>roslib</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

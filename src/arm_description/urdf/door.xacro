@@ -1,10 +1,30 @@
 <?xml version="1.0"?>
+<!--
+  door.xacro — 车门工件模型
+  ==========================
+  车门 STL 由 SolidWorks 导出，坐标单位为毫米（mm），在 URDF 中通过
+  scale="0.001 0.001 0.001" 转换为米。
+
+  STL 网格包围盒（mm）：
+    X: 1429 ~ 2642  (宽度 ≈ 1213mm)
+    Y: -858 ~ -480  (厚度 ≈ 379mm)
+    Z:  367 ~ 1483  (高度 ≈ 1116mm)
+  网格几何中心（mm）：(2035, -669, 925)
+  对应缩放后（m）：  (2.035, -0.669, 0.925)
+
+  由于 STL 原点不在网格中心，需要在 visual/collision 的 <origin> 中
+  设置偏移量 xyz="-2.035 0.669 -0.925"，使车门网格居中于 door_link 坐标原点。
+  这样 world_to_door_joint 的 xyz 就直接代表车门中心在世界坐标系中的位置。
+-->
 <robot name="door_panel" xmlns:xacro="http://ros.org/wiki/xacro">
 
-  
+  <!-- 车门网格几何中心偏移（单位：m），用于将 STL 网格居中到 link 原点 -->
+  <xacro:property name="door_mesh_offset_x" value="-2.035"/>
+  <xacro:property name="door_mesh_offset_y" value="0.669"/>
+  <xacro:property name="door_mesh_offset_z" value="-0.925"/>
+
   <link name="door_link">
 
-    
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="8.0"/>
@@ -13,9 +33,9 @@
                izz="0.2"/>
     </inertial>
 
-    
+    <!-- 车门可视网格：偏移至 link 原点居中 -->
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="${door_mesh_offset_x} ${door_mesh_offset_y} ${door_mesh_offset_z}" rpy="0 0 0"/>
       <geometry>
         <mesh filename="package://arm_description/meshes/car_door_visual.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -24,24 +44,19 @@
       </material>
     </visual>
 
+    <!-- 车门碰撞网格：偏移与 visual 保持一致 -->
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="${door_mesh_offset_x} ${door_mesh_offset_y} ${door_mesh_offset_z}" rpy="0 0 0"/>
       <geometry>
         <mesh filename="package://arm_description/meshes/car_door_collision.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  
-  
-
-
   <gazebo reference="door_link">
     <material>Gazebo/White</material>
     <mu1>0.8</mu1>
     <mu2>0.8</mu2>
   </gazebo>
-
-
 
 </robot>
