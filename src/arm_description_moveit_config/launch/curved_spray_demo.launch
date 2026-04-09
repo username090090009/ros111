@@ -1,44 +1,53 @@
 <?xml version="1.0"?>
 <!--
-  curved_spray_demo.launch — 曲面喷涂轨迹规划演示
-  ================================================
-  启动完整的曲面喷涂流程：
-    1. Gazebo + MoveIt 实机执行管线
-    2. 曲面喷涂轨迹规划节点（替代旧的平面蛇形喷涂）
+  curved_spray_demo.launch — Curved-surface spray trajectory planning demo
+  =========================================================================
+  Launches the complete curved-surface spray workflow:
+    1. Gazebo + MoveIt execution pipeline
+    2. Curved-surface spray trajectory planning node
 
-  使用方法：
+  Usage:
     roslaunch arm_description_moveit_config curved_spray_demo.launch
 
-  关键参数说明：
-    band_spacing       : 条带间距（单位 m，越小覆盖越密，默认 0.03）
-    sample_step        : 条带内采样步长（单位 m，默认 0.02）
-    standoff_distance  : 喷枪到表面距离（单位 m，默认 0.18）
-    flip_normals       : 翻转法向量（true/false，默认 false）
-    auto_execute       : 规划后自动执行（true/false，默认 true）
+  Key parameters:
+    band_spacing           : Band spacing in meters (smaller = denser coverage, default 0.03)
+    sample_step            : In-band sample step in meters (default 0.02)
+    standoff_distance      : Spray gun standoff from surface in meters (default 0.18)
+    flip_normals           : Flip surface normals (true/false, default false)
+    auto_execute           : Auto-execute after planning (true/false, default true)
+    orientation_tolerance  : Max orientation relaxation in radians (default 0.15)
+    allow_spray_door_collision : Allow spray gun / door near-surface contact (default true)
 
-  如果车门外表面朝向不对，将 flip_normals 设为 true。
+  If the door outer surface faces the wrong direction, set flip_normals to true.
 
-  注意：车门位姿参数（door_x/y/z, door_yaw 等）需与 URDF 中
-  arm_description.xacro 的 world_to_door_joint 保持一致。
+  Note: Door pose parameters (door_x/y/z, door_yaw, etc.) must match the URDF
+  values in arm_description.xacro world_to_door_joint.
 -->
 <launch>
 
-  <!-- ===== 顶层开关 ===== -->
-  <arg name="paused"      default="false"  doc="Gazebo 启动时暂停"/>
-  <arg name="gazebo_gui"  default="true"   doc="显示 Gazebo GUI"/>
-  <arg name="use_rviz"    default="true"   doc="启动 RViz"/>
-  <arg name="pipeline"    default="ompl"   doc="MoveIt 规划管线"/>
-  <arg name="debug"       default="false"  doc="MoveIt 调试模式"/>
+  <!-- ===== Top-level switches ===== -->
+  <arg name="paused"      default="false"  doc="Start Gazebo paused"/>
+  <arg name="gazebo_gui"  default="true"   doc="Show Gazebo GUI"/>
+  <arg name="use_rviz"    default="true"   doc="Launch RViz"/>
+  <arg name="pipeline"    default="ompl"   doc="MoveIt planning pipeline"/>
+  <arg name="debug"       default="false"  doc="MoveIt debug mode"/>
 
-  <!-- ===== 喷涂参数 ===== -->
-  <arg name="band_spacing"      default="0.03"  doc="条带间距 (m)"/>
-  <arg name="sample_step"       default="0.02"  doc="采样步长 (m)"/>
-  <arg name="standoff_distance" default="0.18"  doc="离面距离 (m)"/>
-  <arg name="flip_normals"      default="false" doc="翻转法向量"/>
-  <arg name="auto_execute"      default="true"  doc="自动执行轨迹"/>
-  <arg name="visualize"         default="true"  doc="发布 RViz 可视化"/>
+  <!-- ===== Spray planning parameters ===== -->
+  <arg name="band_spacing"      default="0.03"  doc="Band spacing (m)"/>
+  <arg name="sample_step"       default="0.02"  doc="In-band sample step (m)"/>
+  <arg name="standoff_distance" default="0.18"  doc="Standoff distance (m)"/>
+  <arg name="flip_normals"      default="false" doc="Flip surface normals"/>
+  <arg name="auto_execute"      default="true"  doc="Auto-execute trajectory"/>
+  <arg name="visualize"         default="true"  doc="Publish RViz visualization"/>
 
-  <!-- ===== 1. Gazebo + MoveIt 实机执行管线 ===== -->
+  <!-- ===== IK and execution parameters ===== -->
+  <arg name="orientation_tolerance"  default="0.15"  doc="Orientation relaxation tolerance (rad)"/>
+  <arg name="ik_check_timeout"       default="0.05"  doc="IK solver timeout for pre-check (s)"/>
+  <arg name="relaxation_attempts"    default="6"     doc="Number of orientation relaxation attempts"/>
+  <arg name="min_segment_size"       default="3"     doc="Minimum waypoints per executable segment"/>
+  <arg name="allow_spray_door_collision" default="true" doc="Allow spray gun / door collision"/>
+
+  <!-- ===== 1. Gazebo + MoveIt execution pipeline ===== -->
   <include file="$(find arm_description_moveit_config)/launch/gazebo_spray.launch">
     <arg name="paused"     value="$(arg paused)"/>
     <arg name="gazebo_gui" value="$(arg gazebo_gui)"/>
@@ -47,10 +56,10 @@
     <arg name="debug"      value="$(arg debug)"/>
   </include>
 
-  <!-- ===== 2. 曲面喷涂轨迹规划节点 ===== -->
+  <!-- ===== 2. Curved-surface spray planning node ===== -->
   <node name="curved_surface_spray_node" pkg="arm_perception"
         type="curved_surface_spray_node" output="screen">
-    <!-- 车门位姿（与 URDF world_to_door_joint 保持一致） -->
+    <!-- Door pose (must match URDF world_to_door_joint) -->
     <param name="door_x"   value="0.90"/>
     <param name="door_y"   value="0.00"/>
     <param name="door_z"   value="0.50"/>
@@ -58,12 +67,12 @@
     <param name="door_pitch" value="0.0"/>
     <param name="door_yaw"  value="1.5708"/>
 
-    <!-- 网格偏移（与 door.xacro 保持一致） -->
+    <!-- Mesh offset (must match door.xacro) -->
     <param name="mesh_offset_x" value="-2.035"/>
     <param name="mesh_offset_y" value="0.669"/>
     <param name="mesh_offset_z" value="-0.925"/>
 
-    <!-- 喷涂参数 -->
+    <!-- Spray planning parameters -->
     <param name="band_spacing"      value="$(arg band_spacing)"/>
     <param name="sample_step"       value="$(arg sample_step)"/>
     <param name="standoff_distance" value="$(arg standoff_distance)"/>
@@ -71,9 +80,16 @@
     <param name="auto_execute"      value="$(arg auto_execute)"/>
     <param name="visualize"         value="$(arg visualize)"/>
 
-    <!-- Cartesian 路径参数 -->
+    <!-- Cartesian path parameters -->
     <param name="eef_step"                value="0.01"/>
     <param name="min_cartesian_fraction"  value="0.70"/>
+
+    <!-- IK and execution parameters -->
+    <param name="orientation_tolerance"  value="$(arg orientation_tolerance)"/>
+    <param name="ik_check_timeout"       value="$(arg ik_check_timeout)"/>
+    <param name="relaxation_attempts"    value="$(arg relaxation_attempts)"/>
+    <param name="min_segment_size"       value="$(arg min_segment_size)"/>
+    <param name="allow_spray_door_collision" value="$(arg allow_spray_door_collision)"/>
   </node>
 
 </launch>

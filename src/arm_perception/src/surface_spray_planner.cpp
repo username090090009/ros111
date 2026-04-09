@@ -1,6 +1,6 @@
 /**
  * @file surface_spray_planner.cpp
- * @brief 曲面喷涂轨迹规划器实现
+ * @brief Curved-surface spray trajectory planner implementation
  *
  * 规划流程：
  *   1. 加载 STL 网格并应用车门位姿变换（与 URDF 一致）
@@ -8,6 +8,7 @@
  *   3. 在每个条带的 Z 高度处，对三角面片求交线并采样
  *   4. 按扫描方向排序采样点，构建蛇形路径
  *   5. 每个路径点沿表面法向量偏移 standoff 距离，作为喷枪 TCP 位置
+ *   6. 将路径点同时以世界坐标系和工作坐标系（door_work_frame）表示
  */
 
 #include "arm_perception/surface_spray_planner.h"
@@ -20,6 +21,31 @@ namespace arm_perception
 {
 
 // ============================================================================
+// SprayBand::toRosPoses — 将条带路径点转换为 ROS Pose 数组
+// ============================================================================
+
+std::vector<geometry_msgs::Pose> SprayBand::toRosPoses() const
+{
+  std::vector<geometry_msgs::Pose> poses;
+  poses.reserve(waypoints.size());
+
+  for (const auto& wp : waypoints)
+  {
+    geometry_msgs::Pose pose;
+    pose.position.x = wp.position.x();
+    pose.position.y = wp.position.y();
+    pose.position.z = wp.position.z();
+    pose.orientation.x = wp.orientation.x();
+    pose.orientation.y = wp.orientation.y();
+    pose.orientation.z = wp.orientation.z();
+    pose.orientation.w = wp.orientation.w();
+    poses.push_back(pose);
+  }
+
+  return poses;
+}
+
+// ============================================================================
 // 初始化：加载网格、应用变换
 // ============================================================================
 
@@ -27,6 +53,7 @@ bool SurfaceSprayPlanner::init(const SprayPlannerParams& params)
 {
   params_ = params;
   waypoints_.clear();
+  bands_.clear();
   num_bands_ = 0;
 
   // 1. 加载 STL
@@ -35,7 +62,10 @@ bool SurfaceSprayPlanner::init(const SprayPlannerParams& params)
     return false;
   }
 
-  // 2. 构造完整变换：先应用网格居中偏移，再应用车门关节位姿
+  // 2. 保存车门位姿变换
+  door_transform_ = params_.door_transform;
+
+  // 3. 构造完整变换：先应用网格居中偏移，再应用车门关节位姿
   //    T_world_mesh = T_world_door * T_door_mesh
   //    其中 T_door_mesh 仅为平移（mesh offset）
   Eigen::Isometry3d mesh_offset_transform = Eigen::Isometry3d::Identity();
@@ -45,7 +75,11 @@ bool SurfaceSprayPlanner::init(const SprayPlannerParams& params)
 
   mesh_.applyTransform(full_transform);
 
-  // 3. 可选：翻转法向量
+  // 4. 计算工作坐标系逆变换（用于将世界坐标系点转换到工作坐标系）
+  //    door_work_frame 与 door_link 原点重合
+  work_frame_inverse_ = params_.door_transform.inverse();
+
+  // 5. 可选：翻转法向量
   if (params_.flip_normals)
   {
     for (auto& tri : mesh_.trianglesMutable())
@@ -154,12 +188,32 @@ Eigen::Quaterniond SurfaceSprayPlanner::buildOrientationFromNormal(
 }
 
 // ============================================================================
+// 绕喷涂轴旋转姿态（用于姿态松弛）
+// @param base_orientation 基础姿态四元数
+// @param normal 喷涂轴方向（表面法向量）
+// @param angle 旋转角度（弧度），正值为绕法向量反方向的右手旋转
+// @return 旋转后的归一化姿态四元数
+// ============================================================================
+
+Eigen::Quaterniond SurfaceSprayPlanner::rotateAroundSprayAxis(
+    const Eigen::Quaterniond& base_orientation,
+    const Eigen::Vector3d& normal,
+    double angle)
+{
+  // 绕法向量反方向（即喷枪 X 轴方向）旋转
+  Eigen::Vector3d spray_axis = -normal.normalized();
+  Eigen::AngleAxisd rotation(angle, spray_axis);
+  return (rotation * base_orientation).normalized();
+}
+
+// ============================================================================
 // 执行轨迹规划
 // ============================================================================
 
 bool SurfaceSprayPlanner::plan()
 {
   waypoints_.clear();
+  bands_.clear();
   num_bands_ = 0;
 
   if (mesh_.numTriangles() == 0)
@@ -218,7 +272,6 @@ bool SurfaceSprayPlanner::plan()
     }
 
     // 沿排序后的点列表进行等距采样
-    // 先把排序后的点放入临时容器
     std::vector<Eigen::Vector3d> sorted_points(indices.size());
     std::vector<Eigen::Vector3d> sorted_normals(indices.size());
     for (size_t i = 0; i < indices.size(); ++i)
@@ -226,6 +279,11 @@ bool SurfaceSprayPlanner::plan()
       sorted_points[i] = slice_points[indices[i]];
       sorted_normals[i] = slice_normals[indices[i]];
     }
+
+    // 当前条带
+    SprayBand band;
+    band.band_index = band_index;
+    band.z_height = z;
 
     // 等距采样
     if (sorted_points.size() >= 2)
@@ -273,7 +331,7 @@ bool SurfaceSprayPlanner::plan()
         Eigen::Vector3d nm = (sorted_normals[seg_idx] * (1.0 - t)
                            + sorted_normals[seg_idx + 1] * t).normalized();
 
-        // 构造喷涂路径点
+        // 构造喷涂路径点（世界坐标系）
         SprayWaypoint wp;
         wp.surface_point = pt;
         wp.surface_normal = nm;
@@ -281,7 +339,13 @@ bool SurfaceSprayPlanner::plan()
         wp.orientation = buildOrientationFromNormal(nm);
         wp.band_index = band_index;
 
+        // 计算工作坐标系中的位置和姿态
+        wp.position_in_work_frame = work_frame_inverse_ * wp.position;
+        wp.orientation_in_work_frame =
+            Eigen::Quaterniond(work_frame_inverse_.rotation()) * wp.orientation;
+
         waypoints_.push_back(wp);
+        band.waypoints.push_back(wp);
 
         current_distance += params_.sample_step;
       }
@@ -295,7 +359,16 @@ bool SurfaceSprayPlanner::plan()
       wp.position = sorted_points[0] + sorted_normals[0] * params_.standoff_distance;
       wp.orientation = buildOrientationFromNormal(sorted_normals[0]);
       wp.band_index = band_index;
+      wp.position_in_work_frame = work_frame_inverse_ * wp.position;
+      wp.orientation_in_work_frame =
+          Eigen::Quaterniond(work_frame_inverse_.rotation()) * wp.orientation;
       waypoints_.push_back(wp);
+      band.waypoints.push_back(wp);
+    }
+
+    if (!band.waypoints.empty())
+    {
+      bands_.push_back(band);
     }
 
     ++band_index;

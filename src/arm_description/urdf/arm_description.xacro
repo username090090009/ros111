@@ -369,6 +369,30 @@
     <child link="door_link"/>
     <origin xyz="0.90 0.00 0.50" rpy="0 0 1.5708"/>
   </joint>
+
+  <!--
+    door_mount_frame — 车门安装参考坐标系
+    与 door_link 原点重合，用于表示车门的安装位置。
+    在实际部署中，通过标定确定此 frame 在 world 中的位姿。
+  -->
+  <link name="door_mount_frame"/>
+  <joint name="door_to_mount_frame_joint" type="fixed">
+    <parent link="door_link"/>
+    <child link="door_mount_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!--
+    door_work_frame — 车门喷涂工作坐标系
+    与 door_link 原点重合。喷涂路径点可相对此 frame 表示，
+    便于标定后直接复用路径数据。
+  -->
+  <link name="door_work_frame"/>
+  <joint name="door_to_work_frame_joint" type="fixed">
+    <parent link="door_link"/>
+    <child link="door_work_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
   
   
   

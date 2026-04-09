@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(arm_perception)
 
-## 使用 C++14 标准（Eigen 需要）
+## C++14 standard (required by Eigen)
 add_compile_options(-std=c++14)
 
-## 查找依赖包
+## Find dependencies
 find_package(catkin REQUIRED COMPONENTS
   pcl_conversions
   pcl_ros
   roscpp
-  roslib          # ros::package::getPath() 用于定位 STL 文件
+  roslib
   sensor_msgs
   std_msgs
   visualization_msgs
@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2
   tf2_ros
   tf2_geometry_msgs
+  moveit_core
   moveit_ros_planning_interface
   moveit_msgs
 )
@@ -31,10 +32,10 @@ catkin_package(
     pcl_conversions pcl_ros roscpp roslib
     sensor_msgs std_msgs visualization_msgs geometry_msgs
     tf2 tf2_ros tf2_geometry_msgs
-    moveit_ros_planning_interface moveit_msgs
+    moveit_core moveit_ros_planning_interface moveit_msgs
 )
 
-## 头文件路径
+## Header include paths
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
@@ -42,7 +43,7 @@ include_directories(
 )
 
 # ===========================================================================
-# 库：STL 网格加载器
+# Library: STL mesh loader
 # ===========================================================================
 add_library(stl_mesh_loader
   src/stl_mesh_loader.cpp
@@ -56,7 +57,7 @@ add_dependencies(stl_mesh_loader
 )
 
 # ===========================================================================
-# 库：曲面喷涂轨迹规划器
+# Library: Curved-surface spray trajectory planner
 # ===========================================================================
 add_library(surface_spray_planner
   src/surface_spray_planner.cpp
@@ -71,7 +72,7 @@ add_dependencies(surface_spray_planner
 )
 
 # ===========================================================================
-# 节点：曲面喷涂轨迹规划与执行（新主流程）
+# Node: Curved-surface spray planning and execution (main flow)
 # ===========================================================================
 add_executable(curved_surface_spray_node
   src/curved_surface_spray_node.cpp
@@ -87,20 +88,20 @@ add_dependencies(curved_surface_spray_node
 )
 
 # ===========================================================================
-# 旧节点（保留但不再作为主流程使用）
+# Legacy nodes (preserved but no longer the main flow)
 # ===========================================================================
 
-# 点云感知节点
+# Point cloud perception node
 add_executable(door_cloud_listener src/door_cloud_listener.cpp)
 target_link_libraries(door_cloud_listener ${catkin_LIBRARIES})
 add_dependencies(door_cloud_listener ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-# 旧单点 MoveIt 执行器
+# Legacy single-pose MoveIt executor
 add_executable(door_moveit_executor src/door_moveit_executor.cpp)
 target_link_libraries(door_moveit_executor ${catkin_LIBRARIES})
 add_dependencies(door_moveit_executor ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-# 旧平面蛇形喷涂执行器（已被 curved_surface_spray_node 替代）
+# Legacy planar snake spray executor (superseded by curved_surface_spray_node)
 add_executable(door_spray_executor src/door_spray_executor.cpp)
 target_link_libraries(door_spray_executor ${catkin_LIBRARIES})
 add_dependencies(door_spray_executor ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
