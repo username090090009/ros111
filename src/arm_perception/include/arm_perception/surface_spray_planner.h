@@ -1,6 +1,6 @@
 /**
  * @file surface_spray_planner.h
- * @brief 曲面喷涂轨迹规划器
+ * @brief Curved-surface spray trajectory planner
  *
  * 基于 STL 三角网格，在车门曲面上生成喷涂轨迹路径点（waypoints）。
  * 规划流程：
@@ -11,6 +11,11 @@
  *      - 位置：从网格表面沿法向量偏移 standoff 距离
  *      - 姿态：喷枪 TCP 的 X 轴指向车门表面（即沿法向量反方向）
  *   5. 相邻条带交替方向，形成蛇形（S 形）路径
+ *
+ * 新增功能：
+ *   - SprayBand 结构：按条带组织路径点，便于段级执行
+ *   - 工作坐标系支持：路径点可相对 door_work_frame 表示
+ *   - 姿态容差：允许绕喷涂轴一定角度旋转
  */
 
 #ifndef ARM_PERCEPTION_SURFACE_SPRAY_PLANNER_H
@@ -65,16 +70,36 @@ struct SprayPlannerParams
   /// 法向量翻转：true 时将所有法向量取反
   /// 当喷涂面朝向与默认法向量方向相反时使用
   bool flip_normals = false;
+
+  /// 姿态容差（弧度）：允许绕喷涂轴旋转的最大角度
+  /// 用于在 IK 求解失败时放松姿态约束
+  double orientation_tolerance = 0.15;
 };
 
 /// 单个喷涂路径点
 struct SprayWaypoint
 {
-  Eigen::Vector3d position;     ///< 喷枪 TCP 位置（base_link 坐标系）
+  Eigen::Vector3d position;       ///< 喷枪 TCP 位置（base_link 坐标系）
   Eigen::Quaterniond orientation; ///< 喷枪 TCP 姿态
-  Eigen::Vector3d surface_point; ///< 对应的车门表面点（用于可视化/调试）
+  Eigen::Vector3d surface_point;  ///< 对应的车门表面点（用于可视化/调试）
   Eigen::Vector3d surface_normal; ///< 对应的表面法向量
-  int band_index;                ///< 所属条带索引
+  int band_index;                 ///< 所属条带索引
+
+  /// 路径点在工作坐标系中的位置（相对于 door_work_frame）
+  Eigen::Vector3d position_in_work_frame;
+  /// 路径点在工作坐标系中的姿态
+  Eigen::Quaterniond orientation_in_work_frame;
+};
+
+/// 喷涂条带：一组同一高度的路径点
+struct SprayBand
+{
+  int band_index;                          ///< 条带索引
+  double z_height;                         ///< 切片 Z 高度（世界坐标系）
+  std::vector<SprayWaypoint> waypoints;    ///< 条带内的路径点
+
+  /// 将条带路径点转换为 geometry_msgs::Pose 数组
+  std::vector<geometry_msgs::Pose> toRosPoses() const;
 };
 
 /**
@@ -97,12 +122,15 @@ public:
    * @brief 执行曲面喷涂轨迹规划
    * @return 规划成功返回 true
    *
-   * 调用后通过 waypoints() 获取规划结果。
+   * 调用后通过 waypoints() 或 bands() 获取规划结果。
    */
   bool plan();
 
-  /// 获取规划生成的路径点列表
+  /// 获取规划生成的路径点列表（所有条带展平）
   const std::vector<SprayWaypoint>& waypoints() const { return waypoints_; }
+
+  /// 获取按条带组织的路径点
+  const std::vector<SprayBand>& bands() const { return bands_; }
 
   /// 将路径点转换为 MoveIt 可用的 geometry_msgs::Pose 数组
   std::vector<geometry_msgs::Pose> toRosPoses() const;
@@ -116,6 +144,29 @@ public:
   /// 获取已加载的网格
   const StlMeshLoader& mesh() const { return mesh_; }
 
+  /// 获取车门工作坐标系变换（world → door_work_frame 的逆变换）
+  const Eigen::Isometry3d& doorTransform() const { return door_transform_; }
+
+  /**
+   * @brief 根据表面法向量构造喷枪姿态四元数
+   *
+   * 喷枪 TCP 的 X 轴指向车门表面（法向量反方向），
+   * Z 轴尽量朝上（世界 Z 方向）。
+   */
+  static Eigen::Quaterniond buildOrientationFromNormal(const Eigen::Vector3d& normal);
+
+  /**
+   * @brief 绕喷涂轴（法向量方向）旋转姿态
+   * @param base_orientation 基础姿态
+   * @param normal 喷涂轴方向（法向量）
+   * @param angle 旋转角度（弧度）
+   * @return 旋转后的姿态
+   */
+  static Eigen::Quaterniond rotateAroundSprayAxis(
+      const Eigen::Quaterniond& base_orientation,
+      const Eigen::Vector3d& normal,
+      double angle);
+
 private:
   /**
    * @brief 在指定 Z 高度处对网格进行水平切片，获取交线上的采样点及其法向量
@@ -127,17 +178,12 @@ private:
                          std::vector<Eigen::Vector3d>& points,
                          std::vector<Eigen::Vector3d>& normals) const;
 
-  /**
-   * @brief 根据表面法向量构造喷枪姿态四元数
-   *
-   * 喷枪 TCP 的 X 轴指向车门表面（法向量反方向），
-   * Z 轴尽量朝上（世界 Z 方向）。
-   */
-  static Eigen::Quaterniond buildOrientationFromNormal(const Eigen::Vector3d& normal);
-
   SprayPlannerParams params_;
   StlMeshLoader mesh_;
   std::vector<SprayWaypoint> waypoints_;
+  std::vector<SprayBand> bands_;
+  Eigen::Isometry3d door_transform_;     ///< 车门位姿变换 (world ← door)
+  Eigen::Isometry3d work_frame_inverse_; ///< door_work_frame → world 的逆 (world → work)
   int num_bands_ = 0;
 };
 
