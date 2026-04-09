@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<!--
+  curved_spray_demo.launch — 曲面喷涂轨迹规划演示
+  ================================================
+  启动完整的曲面喷涂流程：
+    1. Gazebo + MoveIt 实机执行管线
+    2. 曲面喷涂轨迹规划节点（替代旧的平面蛇形喷涂）
+
+  使用方法：
+    roslaunch arm_description_moveit_config curved_spray_demo.launch
+
+  关键参数说明：
+    band_spacing       : 条带间距（单位 m，越小覆盖越密，默认 0.03）
+    sample_step        : 条带内采样步长（单位 m，默认 0.02）
+    standoff_distance  : 喷枪到表面距离（单位 m，默认 0.18）
+    flip_normals       : 翻转法向量（true/false，默认 false）
+    auto_execute       : 规划后自动执行（true/false，默认 true）
+
+  如果车门外表面朝向不对，将 flip_normals 设为 true。
+
+  注意：车门位姿参数（door_x/y/z, door_yaw 等）需与 URDF 中
+  arm_description.xacro 的 world_to_door_joint 保持一致。
+-->
+<launch>
+
+  <!-- ===== 顶层开关 ===== -->
+  <arg name="paused"      default="false"  doc="Gazebo 启动时暂停"/>
+  <arg name="gazebo_gui"  default="true"   doc="显示 Gazebo GUI"/>
+  <arg name="use_rviz"    default="true"   doc="启动 RViz"/>
+  <arg name="pipeline"    default="ompl"   doc="MoveIt 规划管线"/>
+  <arg name="debug"       default="false"  doc="MoveIt 调试模式"/>
+
+  <!-- ===== 喷涂参数 ===== -->
+  <arg name="band_spacing"      default="0.03"  doc="条带间距 (m)"/>
+  <arg name="sample_step"       default="0.02"  doc="采样步长 (m)"/>
+  <arg name="standoff_distance" default="0.18"  doc="离面距离 (m)"/>
+  <arg name="flip_normals"      default="false" doc="翻转法向量"/>
+  <arg name="auto_execute"      default="true"  doc="自动执行轨迹"/>
+  <arg name="visualize"         default="true"  doc="发布 RViz 可视化"/>
+
+  <!-- ===== 1. Gazebo + MoveIt 实机执行管线 ===== -->
+  <include file="$(find arm_description_moveit_config)/launch/gazebo_spray.launch">
+    <arg name="paused"     value="$(arg paused)"/>
+    <arg name="gazebo_gui" value="$(arg gazebo_gui)"/>
+    <arg name="use_rviz"   value="$(arg use_rviz)"/>
+    <arg name="pipeline"   value="$(arg pipeline)"/>
+    <arg name="debug"      value="$(arg debug)"/>
+  </include>
+
+  <!-- ===== 2. 曲面喷涂轨迹规划节点 ===== -->
+  <node name="curved_surface_spray_node" pkg="arm_perception"
+        type="curved_surface_spray_node" output="screen">
+    <!-- 车门位姿（与 URDF world_to_door_joint 保持一致） -->
+    <param name="door_x"   value="0.90"/>
+    <param name="door_y"   value="0.00"/>
+    <param name="door_z"   value="0.50"/>
+    <param name="door_roll" value="0.0"/>
+    <param name="door_pitch" value="0.0"/>
+    <param name="door_yaw"  value="1.5708"/>
+
+    <!-- 网格偏移（与 door.xacro 保持一致） -->
+    <param name="mesh_offset_x" value="-2.035"/>
+    <param name="mesh_offset_y" value="0.669"/>
+    <param name="mesh_offset_z" value="-0.925"/>
+
+    <!-- 喷涂参数 -->
+    <param name="band_spacing"      value="$(arg band_spacing)"/>
+    <param name="sample_step"       value="$(arg sample_step)"/>
+    <param name="standoff_distance" value="$(arg standoff_distance)"/>
+    <param name="flip_normals"      value="$(arg flip_normals)"/>
+    <param name="auto_execute"      value="$(arg auto_execute)"/>
+    <param name="visualize"         value="$(arg visualize)"/>
+
+    <!-- Cartesian 路径参数 -->
+    <param name="eef_step"                value="0.01"/>
+    <param name="min_cartesian_fraction"  value="0.70"/>
+  </node>
+
+</launch>
