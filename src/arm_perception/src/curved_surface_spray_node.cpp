@@ -86,7 +86,7 @@ public:
     pnh.param<double>("planning_time", planning_time_, 15.0);
     pnh.param<int>("max_attempts", max_attempts_, 20);
     pnh.param<double>("position_tolerance", position_tolerance_, 0.02);
-    pnh.param<double>("orientation_tolerance_goal", orientation_tolerance_goal_, 0.30);
+    pnh.param<double>("orientation_tolerance_goal", goal_orientation_tolerance_, 0.30);
 
     // ---- Cartesian path parameters ----
     pnh.param<double>("eef_step", eef_step_, 0.01);
@@ -141,7 +141,7 @@ public:
     move_group_.setPlanningTime(planning_time_);
     move_group_.setNumPlanningAttempts(max_attempts_);
     move_group_.setGoalPositionTolerance(position_tolerance_);
-    move_group_.setGoalOrientationTolerance(orientation_tolerance_goal_);
+    move_group_.setGoalOrientationTolerance(goal_orientation_tolerance_);
     move_group_.setEndEffectorLink(end_effector_link_);
     move_group_.allowReplanning(true);
 
@@ -631,7 +631,10 @@ private:
     acm.entry_names.push_back("spray_gun_mount_link");
     acm.entry_names.push_back("spray_tcp_link");
 
-    // 创建 4x4 的 ACM 条目
+    // 创建 NxN 的 ACM 条目
+    // entry_names 顺序: [0]=door_link, [1]=spray_gun_link,
+    //   [2]=spray_gun_mount_link, [3]=spray_tcp_link
+    // 允许 door_link (index 0) 与所有喷枪组件 (index 1,2,3) 的碰撞
     for (size_t i = 0; i < acm.entry_names.size(); ++i)
     {
       moveit_msgs::AllowedCollisionEntry entry;
@@ -921,7 +924,7 @@ private:
   double planning_time_;
   int max_attempts_;
   double position_tolerance_;
-  double orientation_tolerance_goal_;
+  double goal_orientation_tolerance_;
 
   // Cartesian 路径参数
   double eef_step_;

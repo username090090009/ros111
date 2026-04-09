@@ -5,6 +5,8 @@ arm:
   # The original 5ms was too short for KDL, causing frequent IK failures
   # and planning timeouts during Cartesian path computation.
   kinematics_solver_timeout: 0.05
+  # Number of IK solver attempts per query. Multiple attempts with random
+  # seeds help KDL find solutions for poses near workspace boundaries.
   kinematics_solver_attempts: 3
   goal_joint_tolerance: 0.0001
   goal_position_tolerance: 0.0001

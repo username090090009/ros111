@@ -189,6 +189,10 @@ Eigen::Quaterniond SurfaceSprayPlanner::buildOrientationFromNormal(
 
 // ============================================================================
 // 绕喷涂轴旋转姿态（用于姿态松弛）
+// @param base_orientation 基础姿态四元数
+// @param normal 喷涂轴方向（表面法向量）
+// @param angle 旋转角度（弧度），正值为绕法向量反方向的右手旋转
+// @return 旋转后的归一化姿态四元数
 // ============================================================================
 
 Eigen::Quaterniond SurfaceSprayPlanner::rotateAroundSprayAxis(
