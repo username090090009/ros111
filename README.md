@@ -1,56 +1,64 @@
-# 车门曲面喷涂轨迹规划系统
+# Car Door Curved-Surface Spray Trajectory Planning System
 
-基于 ROS1 / MoveIt1 的 6 轴机械臂车门曲面喷涂轨迹规划系统。
+A 6-axis robotic arm car door curved-surface spray trajectory planning system based on ROS1 / MoveIt1.
 
-## 项目概述
+## Project Overview
 
-本项目实现了面向真实整车门 STL 网格的**曲面喷涂轨迹规划**，替代了原有的简单平面蛇形喷涂方案。系统直接从车门 STL 模型中提取表面几何信息，在曲面上生成带法向量的喷涂路径点，并通过 MoveIt Cartesian Path 执行喷涂轨迹。
+This project implements **curved-surface spray trajectory planning** targeting real car door STL meshes, replacing the original simple planar snake spray approach. The system loads the car door STL model, extracts surface geometry, generates spray path points with surface normals, performs IK reachability pre-checks, splits paths into executable segments, and executes them via MoveIt Cartesian Path planning.
 
-### 核心特性
+### Core Features
 
-- **STL 网格曲面轨迹规划**：直接加载车门 STL 文件，沿曲面生成喷涂路径
-- **自动法向量计算**：每个喷涂路径点的姿态自动对齐到局部表面法向量
-- **水平条带蛇形扫描**：沿 Z 轴从下到上分层切片，交替方向形成蛇形路径
-- **可调参数**：条带间距、采样步长、离面距离等均可通过 ROS 参数调节
-- **RViz 可视化**：路径点和法向量箭头实时发布为 RViz Marker
-- **保留已有资产**：复用现有 ROS1/MoveIt1 工作单元和喷枪建模
+- **STL mesh curved-surface planning**: Directly loads car door STL files, generates spray paths along the curved surface
+- **Automatic surface normal computation**: Each spray path point orientation aligns to the local surface normal
+- **Horizontal band snake scanning**: Slices along the Z axis from bottom to top, alternating direction to form snake patterns
+- **IK pre-check and reachability analysis**: Validates every waypoint before execution, reports reachability statistics
+- **Reachable segment splitting**: Automatically splits bands into continuous reachable subsegments
+- **Segment-wise Cartesian execution**: Executes each reachable segment independently instead of entire bands
+- **Orientation relaxation**: When strict normal alignment causes IK failure, tries rotations around the spray axis
+- **Collision handling**: Allows spray gun / door near-surface contact to avoid false collision rejections
+- **Configurable parameters**: Band spacing, sample step, standoff distance, orientation tolerance, etc.
+- **RViz visualization**: Path points and surface normal arrows published as RViz Markers
+- **Work frame support**: Waypoints can be represented relative to `door_work_frame` for portability
+- **Comprehensive diagnostics**: IK success ratio, first failed waypoint, per-band statistics, Cartesian fraction per segment
 
-## 系统架构
+## System Architecture
 
 ```
-arm_description/          # 机械臂 + 喷枪 + 车门 URDF/xacro 模型
+arm_description/                    # Robot + spray gun + car door URDF/xacro models
 ├── urdf/
-│   ├── arm_description.xacro   # 主 xacro：机械臂 + 喷枪 + 车门关节
-│   └── door.xacro              # 车门 STL 网格定义
+│   ├── arm_description.xacro       # Main xacro: arm + spray gun + door joints + work frames
+│   └── door.xacro                  # Car door STL mesh definition
 ├── meshes/
-│   ├── car_door_visual.stl     # 车门可视网格（SolidWorks 导出，mm 单位）
-│   ├── car_door_collision.stl  # 车门碰撞网格
-│   └── *.STL                   # 机械臂各 link 网格
+│   ├── car_door_visual.stl         # Car door visual mesh (SolidWorks export, mm units)
+│   ├── car_door_collision.stl      # Car door collision mesh
+│   └── *.STL                       # Robot arm link meshes
 └── launch/
 
-arm_perception/           # 感知与轨迹规划
+arm_perception/                     # Perception and trajectory planning
 ├── include/arm_perception/
-│   ├── stl_mesh_loader.h       # STL 二进制网格加载器
-│   └── surface_spray_planner.h # 曲面喷涂轨迹规划器
+│   ├── stl_mesh_loader.h           # Binary STL mesh loader
+│   └── surface_spray_planner.h     # Curved-surface spray trajectory planner
 ├── src/
-│   ├── stl_mesh_loader.cpp             # STL 加载实现
-│   ├── surface_spray_planner.cpp       # 曲面规划实现
-│   ├── curved_surface_spray_node.cpp   # 【新主节点】曲面喷涂 ROS 节点
-│   ├── door_spray_executor.cpp         # 【旧】平面蛇形喷涂（已废弃）
-│   ├── door_moveit_executor.cpp        # 【旧】单点 MoveIt 执行器
-│   └── door_cloud_listener.cpp         # 点云感知节点
+│   ├── stl_mesh_loader.cpp         # STL loading implementation
+│   ├── surface_spray_planner.cpp   # Curved-surface planning implementation
+│   ├── curved_surface_spray_node.cpp   # [Main] Curved-surface spray ROS node
+│   ├── door_spray_executor.cpp     # [Legacy] Planar snake spray (superseded)
+│   ├── door_moveit_executor.cpp    # [Legacy] Single-point MoveIt executor
+│   └── door_cloud_listener.cpp     # Point cloud perception node
 
-arm_description_moveit_config/  # MoveIt 配置
+arm_description_moveit_config/      # MoveIt configuration
 ├── launch/
-│   ├── curved_spray_demo.launch  # 【推荐】曲面喷涂完整演示
-│   ├── spray_demo.launch         # 旧平面喷涂演示（已废弃）
+│   ├── curved_spray_demo.launch    # [Recommended] Complete curved spray demo
+│   ├── spray_demo.launch           # Legacy planar spray demo (superseded)
 │   └── ...
 └── config/
+    ├── kinematics.yaml             # IK solver config (KDL, timeout=0.05s)
+    └── ...
 ```
 
-## 快速开始
+## Quick Start
 
-### 环境要求
+### Prerequisites
 
 - ROS Melodic / Noetic
 - MoveIt 1
@@ -58,64 +66,110 @@ arm_description_moveit_config/  # MoveIt 配置
 - Eigen3
 - PCL
 
-### 编译
+### Build
 
 ```bash
 cd ~/catkin_ws
 catkin_make
-# 或
+# or
 catkin build
 source devel/setup.bash
 ```
 
-### 运行曲面喷涂演示
+### Run Curved-Surface Spray Demo
 
 ```bash
-# 推荐：一键启动完整演示（Gazebo + MoveIt + 曲面喷涂）
+# Recommended: one-command full demo (Gazebo + MoveIt + curved spray)
 roslaunch arm_description_moveit_config curved_spray_demo.launch
 ```
 
-### 参数调节
+### Parameter Tuning
 
-通过 launch 文件参数或命令行参数调节喷涂行为：
+Adjust spray behavior via launch file arguments:
 
 ```bash
-# 加密条带（间距 2cm）+ 增大离面距离
+# Denser bands (2cm spacing) + larger standoff
 roslaunch arm_description_moveit_config curved_spray_demo.launch \
   band_spacing:=0.02 \
   standoff_distance:=0.25
 
-# 仅规划和可视化，不执行
+# Plan and visualize only, do not execute
 roslaunch arm_description_moveit_config curved_spray_demo.launch \
   auto_execute:=false
 
-# 翻转法向量（当喷涂面朝向不对时使用）
+# Flip normals (when spray surface faces the wrong way)
 roslaunch arm_description_moveit_config curved_spray_demo.launch \
   flip_normals:=true
+
+# Increase orientation relaxation for better IK success rate
+roslaunch arm_description_moveit_config curved_spray_demo.launch \
+  orientation_tolerance:=0.3
+
+# Disable spray gun / door collision allowance
+roslaunch arm_description_moveit_config curved_spray_demo.launch \
+  allow_spray_door_collision:=false
 ```
 
-## 车门位姿配置说明
+## Coordinate Frames
 
-### 已修复的问题
+### Frame Hierarchy
 
-原始配置中车门 STL 存在以下问题：
-1. **STL 网格原点不在几何中心**：SolidWorks 导出的 STL 原点在整车坐标系中，距车门实际几何中心约 2m
-2. **车门未旋转**：车门平面未正对机械臂
-3. **Z 方向位置为零**：车门放在地面上，大部分区域不在机械臂可达空间内
+```
+world (fixed)
+  ├── base_link (robot arm base)
+  │     └── link1 → link2 → ... → link6
+  │           └── spray_gun_mount_link
+  │                 ├── spray_gun_link
+  │                 │     └── spray_tcp_link (spray tool center point)
+  │                 └── rgbd_camera_link
+  │
+  └── door_link (car door)
+        ├── Joint pose: xyz=(0.90, 0, 0.50) rpy=(0, 0, pi/2)
+        ├── Mesh offset: xyz=(-2.035, 0.669, -0.925)
+        ├── door_mount_frame (coincides with door_link origin)
+        └── door_work_frame  (coincides with door_link origin)
+```
 
-### 修复方案
+### `door_work_frame` Design
 
-**door.xacro 中的网格居中偏移：**
+The `door_work_frame` is defined as a fixed frame coinciding with `door_link` origin. It serves as the reference for representing spray path waypoints in a door-relative coordinate system.
 
-车门 STL 网格包围盒（缩放后，单位 m）：
-- X: 1.429 ~ 2.642 (宽度 ≈ 1.213m)
-- Y: -0.858 ~ -0.480 (厚度 ≈ 0.379m)
-- Z: 0.367 ~ 1.483 (高度 ≈ 1.116m)
-- 几何中心: (2.035, -0.669, 0.925)
+**Purpose:**
+- In simulation, `door_work_frame` is computed from the URDF joint parameters.
+- In real-robot deployment, `door_work_frame` will be determined by calibration (e.g., vision-based localization).
+- Spray paths stored relative to `door_work_frame` can be directly reused across different door placements.
 
-通过设置 `visual/collision origin xyz="-2.035 0.669 -0.925"`，将网格居中到 door_link 坐标原点。
+### STL Coordinate Transform Chain
 
-**arm_description.xacro 中的关节位姿：**
+```
+STL raw coordinates (mm)
+  → × scale (0.001) → Scaled coordinates (m)
+  → + mesh_offset → Centered at door_link origin
+  → × door_transform → World frame
+```
+
+## Car Door Pose Configuration
+
+### Fixed Issues
+
+The original car door STL had the following problems:
+1. **STL mesh origin not at geometric center**: SolidWorks exported the STL with origin at the vehicle coordinate system, approximately 2m from the door's geometric center.
+2. **Door not rotated**: The door plane was not facing the robot arm.
+3. **Z position at zero**: The door was on the ground, mostly outside the robot workspace.
+
+### Solution
+
+**door.xacro mesh centering offset:**
+
+Car door STL bounding box (after scaling, in meters):
+- X: 1.429 ~ 2.642 (width ≈ 1.213m)
+- Y: -0.858 ~ -0.480 (thickness ≈ 0.379m)
+- Z: 0.367 ~ 1.483 (height ≈ 1.116m)
+- Geometric center: (2.035, -0.669, 0.925)
+
+Setting `visual/collision origin xyz="-2.035 0.669 -0.925"` centers the mesh at `door_link` origin.
+
+**arm_description.xacro joint pose:**
 
 ```xml
 <joint name="world_to_door_joint" type="fixed">
@@ -123,44 +177,106 @@ roslaunch arm_description_moveit_config curved_spray_demo.launch \
 </joint>
 ```
 
-- `X=0.90m`：车门中心距机械臂基座 0.9m（用户设定值）
-- `Z=0.50m`：车门中心高度 0.5m，使喷涂区域处于机械臂可达空间
-- `yaw=π/2`：旋转 90°，使车门表面正对机械臂
+- `X=0.90m`: Door center 0.9m from robot base
+- `Z=0.50m`: Door center height 0.5m, placing the spray region in the robot workspace
+- `yaw=pi/2`: Rotate 90° so the door surface faces the robot
 
-> 注：如果加载后发现车门外表面朝向不对（背面朝向机械臂），可将 yaw 改为 `-1.5708`，
-> 或在 launch 文件中设置 `flip_normals:=true`。
+> Note: If the door outer surface faces away from the robot after loading, change yaw to `-1.5708`,
+> or set `flip_normals:=true` in the launch file.
 
-## 轨迹规划算法
+## Planning Algorithm
 
-### 曲面喷涂路径生成流程
+### Curved-Surface Spray Path Generation Pipeline
 
-1. **加载 STL 网格**：读取二进制 STL 文件，提取三角面片和法向量
-2. **坐标变换**：将网格从模型坐标系变换到机械臂基座坐标系（与 URDF 一致）
-3. **水平切片**：沿 Z 轴以 `band_spacing` 间隔对网格做水平截面
-4. **轮廓采样**：在每个截面上，找到三角面片与水平面的交线，按扫描方向排序后等距采样
-5. **法向偏移**：每个采样点沿局部表面法向量偏移 `standoff_distance`，作为喷枪 TCP 位置
-6. **姿态生成**：构造喷枪姿态，使 TCP X 轴指向车门表面（法向量反方向）
-7. **蛇形路径**：相邻条带交替扫描方向，形成 S 形路径
+1. **Load STL mesh**: Read binary STL file, extract triangles and normals
+2. **Coordinate transform**: Transform mesh from model frame to robot base frame (consistent with URDF)
+3. **Horizontal slicing**: Slice mesh along Z axis at `band_spacing` intervals
+4. **Contour sampling**: For each slice, find triangle-plane intersection lines, sort by sweep direction, sample at equal intervals
+5. **Normal offset**: Offset each sample point along the local surface normal by `standoff_distance` to get spray TCP position
+6. **Orientation generation**: Construct spray gun orientation so TCP X axis points toward the surface (opposite of normal)
+7. **Snake path**: Adjacent bands alternate sweep direction forming S-shaped paths
+8. **IK pre-check**: Validate IK for every waypoint, with orientation relaxation if needed
+9. **Reachable segment extraction**: Split each band into continuous reachable subsegments
+10. **Segment-wise execution**: Plan and execute Cartesian paths per segment
 
-### 核心参数
+### Planning Timeout Root Cause and Fix
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `band_spacing` | 0.03 m | 水平条带间距 |
-| `sample_step` | 0.02 m | 条带内路径点间距 |
-| `standoff_distance` | 0.18 m | 喷枪到表面距离 |
-| `boundary_margin` | 0.02 m | 边界裁剪余量 |
-| `eef_step` | 0.01 m | Cartesian 路径插值步长 |
-| `min_cartesian_fraction` | 0.70 | 最小路径覆盖率 |
+The previous version experienced planning timeouts due to several issues:
 
-## 后续规划
+1. **IK solver timeout too short** (0.005s → fixed to 0.05s): The KDL IK solver had only 5ms to find a solution, which is insufficient for many poses near workspace boundaries. Increased to 50ms.
 
-- [ ] 支持多区域分段喷涂（按可达性自动分区）
-- [ ] 集成点云感知自动定位车门（复用 door_cloud_listener）
-- [ ] 速度/加速度优化（匀速喷涂约束）
-- [ ] 真机部署与碰撞检测验证
-- [ ] 支持自定义喷涂区域 ROI 选择
+2. **No IK pre-check**: The code attempted Cartesian path execution on all waypoints without knowing which ones were reachable, leading to the planner spending time on impossible poses.
 
-## 许可证
+3. **No reachable segment splitting**: A single unreachable waypoint in a band would cause the entire band's Cartesian path to fail or have very low coverage fraction.
 
-本项目仅供学习研究使用。
+4. **Over-constrained orientation**: Strict normal alignment with no tolerance caused IK failures for poses near joint limits. Added configurable orientation relaxation.
+
+5. **Door collision too restrictive**: The door collision mesh rejected valid near-surface spray poses. Added collision allowance between spray gun links and door_link.
+
+### Core Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `band_spacing` | 0.03 m | Horizontal band spacing |
+| `sample_step` | 0.02 m | In-band path point spacing |
+| `standoff_distance` | 0.18 m | Spray gun standoff from surface |
+| `boundary_margin` | 0.02 m | Boundary trimming margin |
+| `eef_step` | 0.01 m | Cartesian path interpolation step |
+| `min_cartesian_fraction` | 0.70 | Minimum Cartesian path coverage |
+| `orientation_tolerance` | 0.15 rad | Max orientation relaxation |
+| `ik_check_timeout` | 0.05 s | IK solver timeout for pre-check |
+| `relaxation_attempts` | 6 | Number of orientation relaxation attempts |
+| `min_segment_size` | 3 | Minimum waypoints per executable segment |
+| `allow_spray_door_collision` | true | Allow spray gun / door collision |
+
+## Diagnostics
+
+The node outputs detailed diagnostic information during execution:
+
+```
+========================================
+IK Pre-check Diagnostics Summary:
+  Total waypoints: 450
+  Reachable:   380 / 450 (84.4%)
+  Unreachable: 70 / 450 (15.6%)
+  First unreachable: band 2, waypoint 15
+  Total executable segments: 22
+========================================
+```
+
+For each band:
+```
+  Band 0: 30 waypoints, 28 reachable (93.3%), 2 segments
+  Band 1: 32 waypoints, 25 reachable (78.1%), 3 segments
+```
+
+For each segment execution:
+```
+  Executing segment: band 0, seg 0, 15 waypoints (idx 0-14)...
+    Cartesian fraction: 95.2% (15 waypoints)
+    Segment execution succeeded.
+```
+
+### Troubleshooting
+
+| Symptom | Likely Cause | Solution |
+|---------|-------------|----------|
+| 0% reachable waypoints | Door outside workspace | Adjust door_x/y/z closer to robot |
+| Low IK success rate | Standoff too large | Reduce standoff_distance |
+| Low IK success rate | Orientation too strict | Increase orientation_tolerance |
+| Low Cartesian fraction | Collision rejection | Set allow_spray_door_collision=true |
+| All segments skipped | min_segment_size too high | Reduce min_segment_size |
+| Planning timeout | IK solver timeout too low | Increase kinematics_solver_timeout in kinematics.yaml |
+
+## Future Work
+
+- [ ] Multi-region segmented spraying (auto-partition by reachability)
+- [ ] Point cloud perception for automatic door localization (reuse door_cloud_listener)
+- [ ] Velocity/acceleration optimization (constant-speed spray constraint)
+- [ ] Real robot deployment and collision verification
+- [ ] Custom spray region ROI selection
+- [ ] Boundary-aware stripe generation (replace pure Z-slicing)
+
+## License
+
+This project is for research and educational purposes only.
